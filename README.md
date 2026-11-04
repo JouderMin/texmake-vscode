@@ -55,3 +55,7 @@ pnpm run build       # 打包到 dist/extension.js
 pnpm test            # 单元测试（node:test）
 pnpm run package     # 生成 texmake-0.1.0.vsix
 ```
+
+## 许可证
+
+本项目使用 GNU 通用公共许可证第 3 版或更新版本发布，SPDX 标识为 `GPL-3.0-or-later`。全文见仓库根目录的 `LICENSE` 文件。
