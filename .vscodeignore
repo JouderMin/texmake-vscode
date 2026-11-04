@@ -1,0 +1,9 @@
+src/
+test/
+out/
+docs/
+node_modules/
+*.vsix
+tsconfig*.json
+rolldown.config.mjs
+pnpm-lock.yaml

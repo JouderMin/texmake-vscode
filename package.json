@@ -1,0 +1,86 @@
+{
+  "name": "texmake",
+  "displayName": "texmake",
+  "description": "用 texmake 编译 LaTeX 文档",
+  "version": "0.1.0",
+  "publisher": "joudermin",
+  "license": "GPL-3.0-or-later",
+  "engines": {
+    "vscode": "^1.120.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "texmake.build",
+        "title": "texmake: Build"
+      },
+      {
+        "command": "texmake.cancel",
+        "title": "texmake: Cancel Build"
+      },
+      {
+        "command": "texmake.showReason",
+        "title": "texmake: Show Detection Reason"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "texmake.build",
+        "key": "f5",
+        "mac": "f5",
+        "when": "texmake.projectActive && texmake.f5Enabled"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "texmake.cancel",
+          "when": "texmake.building"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "texmake",
+      "properties": {
+        "texmake.executable": {
+          "type": "string",
+          "default": "texmake",
+          "description": "texmake 可执行文件路径，或 PATH 中的名字"
+        },
+        "texmake.extraArgs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "追加到 build 之后的参数"
+        },
+        "texmake.f5Enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "为 texmake 工程接管 F5"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "build": "rolldown -c rolldown.config.mjs",
+    "test": "tsc -p tsconfig.test.json && node --test \"out/test/**/*.test.js\"",
+    "package": "vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "smol-toml": "1.9.1"
+  },
+  "devDependencies": {
+    "rolldown": "1.2.16",
+    "typescript": "7.0.2",
+    "@types/vscode": "1.120.0",
+    "@types/node": "22.20.5",
+    "@vscode/vsce": "4.1.0"
+  }
+}
