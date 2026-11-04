@@ -60,6 +60,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const runner = new Runner();
   statusBar.show();
 
+  // 构建代数用于区分新旧构建：旧构建收尾时不得复位新构建的状态。
+  let buildGeneration = 0;
+  let buildingLabel: string | undefined;
+
   /** 重新判定归属，刷新状态栏文案、点击命令与三个上下文键。 */
   async function update(): Promise<void> {
     const settings = readSettings();
@@ -67,7 +71,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const args = buildArgs(d, settings.extraArgs);
     const command = args === undefined ? "" : [settings.executable, ...args].join(" ");
 
-    statusBar.text = statusLabel(d);
+    statusBar.text =
+      buildingLabel === undefined ? statusLabel(d) : `$(sync~spin) texmake: ${buildingLabel}`;
     statusBar.tooltip = statusTooltip(d, command);
     if (runner.running) {
       statusBar.command = "texmake.cancel";
@@ -94,8 +99,11 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
+    const generation = ++buildGeneration;
     const command = [settings.executable, ...args].join(" ");
     const root = d.root;
+    buildingLabel = d.name;
+    statusBar.text = `$(sync~spin) texmake: ${d.name}`;
     statusBar.command = "texmake.cancel";
     await vscode.commands.executeCommand("setContext", "texmake.building", true);
     try {
@@ -132,7 +140,10 @@ export function activate(context: vscode.ExtensionContext): void {
         },
       );
     } finally {
-      await vscode.commands.executeCommand("setContext", "texmake.building", false);
+      if (generation === buildGeneration) {
+        buildingLabel = undefined;
+        await vscode.commands.executeCommand("setContext", "texmake.building", false);
+      }
       await update();
     }
   }

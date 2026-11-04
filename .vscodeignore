@@ -2,8 +2,11 @@ src/
 test/
 out/
 docs/
+.agent-teams/
 node_modules/
 *.vsix
+.gitignore
 tsconfig*.json
 rolldown.config.mjs
 pnpm-lock.yaml
+pnpm-workspace.yaml
