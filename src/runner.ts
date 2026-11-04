@@ -22,7 +22,7 @@ const DEFAULT_KILL_GRACE_MS = 2000;
 interface Execution {
   child?: ChildProcess;
   cancelled: boolean;
-  exited: boolean;
+  closed: boolean;
   completed: boolean;
   graceMs: number;
   graceTimer?: NodeJS.Timeout;
@@ -77,7 +77,7 @@ export class Runner {
     });
     const execution: Execution = {
       cancelled: false,
-      exited: false,
+      closed: false,
       completed: false,
       graceMs: options.killGraceMs ?? DEFAULT_KILL_GRACE_MS,
       groupKill: process.platform !== "win32",
@@ -111,6 +111,7 @@ export class Runner {
     child.stderr?.on("data", (chunk: string) => options.onData(chunk));
 
     child.on("error", (error: Error) => {
+      this.clearGraceTimer(execution);
       this.finish(execution, {
         code: null,
         signal: null,
@@ -119,14 +120,10 @@ export class Runner {
       });
     });
 
-    child.on("exit", () => {
-      execution.exited = true;
-      this.clearGraceTimer(execution);
-    });
-
     // `close` 在 stdio 关闭后触发，确保输出已全部转交 onData 再结算。
     child.on("close", (code, signal) => {
-      execution.exited = true;
+      execution.closed = true;
+      this.clearGraceTimer(execution);
       this.finish(execution, {
         code,
         signal,
@@ -138,13 +135,15 @@ export class Runner {
   }
 
   private terminate(execution: Execution): void {
-    if (execution.exited) return;
+    if (execution.closed) return;
     this.signal(execution, "SIGTERM");
-    if (execution.graceTimer || execution.exited) return;
+    if (execution.graceTimer) return;
 
+    // 升级定时器一直保留到 stdio 真正关闭：只结束组长进程时，
+    // 仍持有管道的孙进程需要在宽限期后被 SIGKILL。
     const timer = setTimeout(() => {
       execution.graceTimer = undefined;
-      if (!execution.exited) this.signal(execution, "SIGKILL");
+      if (!execution.closed) this.signal(execution, "SIGKILL");
     }, execution.graceMs);
     timer.unref();
     execution.graceTimer = timer;
@@ -154,27 +153,25 @@ export class Runner {
     const child = execution.child;
     const pid = child?.pid;
     if (!child || pid === undefined) return;
-    try {
-      if (execution.groupKill) {
-        process.kill(-pid, signal);
-      } else {
-        child.kill(signal);
-      }
-    } catch {
+    if (execution.groupKill) {
       try {
-        child.kill(signal);
+        process.kill(-pid, signal);
       } catch {
-        // 进程已经退出。
+        // 进程组可能已消失，仍尝试直接结束子进程。
       }
+    }
+    try {
+      child.kill(signal);
+    } catch {
+      // 进程已经退出。
     }
   }
 
   private finish(execution: Execution, outcome: BuildOutcome): void {
     if (execution.completed) return;
     execution.completed = true;
-    // 进程仍存活时保留 SIGKILL 升级定时器（替换旧进程后可能仍需升级），
-    // 真正退出时由 exit 处理器清掉。
-    if (execution.exited) this.clearGraceTimer(execution);
+    // 定时器由 `close` 或 spawn `error` 清理；替换旧进程时提前结算，
+    // 但宽限期的 SIGKILL 升级仍需继续，直到它的 stdio 关闭。
     if (this.current === execution) this.current = undefined;
     execution.complete(outcome);
   }
