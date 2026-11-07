@@ -19,6 +19,10 @@
         "title": "texmake: Build"
       },
       {
+        "command": "texmake.clean",
+        "title": "texmake: 清理"
+      },
+      {
         "command": "texmake.cancel",
         "title": "texmake: Cancel Build"
       },

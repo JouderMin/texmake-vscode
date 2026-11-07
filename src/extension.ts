@@ -1,8 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
-import { buildArgs } from "./buildargs";
+import { buildArgs, type Operation } from "./buildargs";
 import { detect, type Detection } from "./detect";
+import { menuItems, type MenuItem } from "./menu";
 import { resolvePdfPath } from "./pdf";
 import { Runner } from "./runner";
 import { statusLabel, statusTooltip } from "./status";
@@ -53,6 +54,27 @@ function reasonOf(d: Detection): string {
   }
 }
 
+/** 状态栏菜单的占位文案，说明当前文件归属。 */
+function ownershipLabel(d: Detection): string {
+  switch (d.kind) {
+    case "project":
+      return `当前项目：${d.name}`;
+    case "member":
+      return `当前成员：${d.name}`;
+    case "config-error":
+      return "当前状态：配置错误";
+    case "member-error":
+      return "当前状态：成员配置错误";
+    case "unlocated":
+      return "当前状态：未定位到 texmake 工程";
+  }
+}
+
+/** 菜单项的编辑器侧形态：在 label/description 之外带上分派用的 id。 */
+interface MenuQuickPickItem extends vscode.QuickPickItem {
+  id: MenuItem["id"];
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("texmake");
   const statusBar = vscode.window.createStatusBarItem(
@@ -76,13 +98,8 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar.text =
       buildingLabel === undefined ? statusLabel(d) : `$(sync~spin) texmake: ${buildingLabel}`;
     statusBar.tooltip = statusTooltip(d, command);
-    if (runner.running) {
-      statusBar.command = "texmake.cancel";
-    } else if (d.kind === "config-error" || d.kind === "member-error") {
-      statusBar.command = "texmake.showReason";
-    } else {
-      statusBar.command = "texmake.build";
-    }
+    // 点击状态栏总是弹出菜单；菜单按当前状态只提供可用项。
+    statusBar.command = "texmake.menu";
 
     await Promise.all([
       vscode.commands.executeCommand("setContext", "texmake.projectActive", d.kind !== "unlocated"),
@@ -91,28 +108,37 @@ export function activate(context: vscode.ExtensionContext): void {
     ]);
   }
 
-  /** 按当前归属启动一次构建；成功（退出码 0 且未取消）返回 true，否则 false。 */
-  async function build(): Promise<boolean> {
+  /**
+   * 按当前归属执行一次 texmake 操作（编译或清理）。
+   * 成功（退出码 0 且未取消）返回 true。清理与编译互斥：构建进行中直接拒绝。
+   */
+  async function runOperation(operation: Operation): Promise<boolean> {
+    if (operation === "clean" && runner.running) {
+      void vscode.window.showWarningMessage("texmake: 构建进行中，请等待完成后再清理");
+      return false;
+    }
+
     const settings = readSettings();
     const d = currentDetection();
-    const args = buildArgs(d, "build", settings.extraArgs);
+    const args = buildArgs(d, operation, settings.extraArgs);
     if (args === undefined || (d.kind !== "project" && d.kind !== "member")) {
       void vscode.window.showErrorMessage(reasonOf(d));
       return false;
     }
 
+    const noun = operation === "build" ? "构建" : "清理";
     const generation = ++buildGeneration;
     const command = [settings.executable, ...args].join(" ");
     const root = d.root;
     buildingLabel = d.name;
     statusBar.text = `$(sync~spin) texmake: ${d.name}`;
-    statusBar.command = "texmake.cancel";
+    statusBar.command = "texmake.menu";
     await vscode.commands.executeCommand("setContext", "texmake.building", true);
     try {
       return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `texmake: 构建 ${d.name}`,
+          title: `texmake: ${noun} ${d.name}`,
           cancellable: true,
         },
         async (_progress, token) => {
@@ -128,14 +154,22 @@ export function activate(context: vscode.ExtensionContext): void {
             output.appendLine("");
             if (outcome.cancelled) {
               void vscode.window.setStatusBarMessage("texmake: 已取消", 3000);
-            } else if (outcome.spawnError !== undefined) {
-              void vscode.window.showErrorMessage(`texmake 启动失败：${outcome.spawnError}`);
-            } else if (outcome.code !== 0) {
-              void vscode.window.showErrorMessage(
-                `texmake 构建失败，退出码 ${outcome.code ?? "未知"}`,
-              );
+              return false;
             }
-            return !outcome.cancelled && outcome.spawnError === undefined && outcome.code === 0;
+            if (outcome.spawnError !== undefined) {
+              void vscode.window.showErrorMessage(`texmake 启动失败：${outcome.spawnError}`);
+              return false;
+            }
+            if (outcome.code !== 0) {
+              void vscode.window.showErrorMessage(
+                `texmake ${noun}失败，退出码 ${outcome.code ?? "未知"}`,
+              );
+              return false;
+            }
+            if (operation === "clean") {
+              void vscode.window.setStatusBarMessage(`已清理 ${d.name}`, 3000);
+            }
+            return true;
           } finally {
             cancelRequested.dispose();
             output.show(true);
@@ -148,6 +182,47 @@ export function activate(context: vscode.ExtensionContext): void {
         await vscode.commands.executeCommand("setContext", "texmake.building", false);
       }
       await update();
+    }
+  }
+
+  /** 编译当前文件所属的工程或成员。 */
+  async function build(): Promise<boolean> {
+    return runOperation("build");
+  }
+
+  /** 清理当前文件所属的工程或成员。 */
+  async function clean(): Promise<boolean> {
+    return runOperation("clean");
+  }
+
+  /** 点击状态栏弹出菜单，并按选中项分派到编译、清理、取消或查看原因。 */
+  async function openMenu(): Promise<void> {
+    const d = currentDetection();
+    const items: MenuQuickPickItem[] = menuItems(d, runner.running).map((item) => ({
+      id: item.id,
+      label: item.label,
+      description: item.description,
+    }));
+    const picked = await vscode.window.showQuickPick(items, {
+      title: "texmake",
+      placeHolder: ownershipLabel(d),
+    });
+    if (picked === undefined) {
+      return;
+    }
+    switch (picked.id) {
+      case "build":
+        await build();
+        return;
+      case "clean":
+        await clean();
+        return;
+      case "cancel":
+        runner.cancel();
+        return;
+      case "reason":
+        void vscode.window.showWarningMessage(reasonOf(d));
+        return;
     }
   }
 
@@ -194,7 +269,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     statusBar,
+    vscode.commands.registerCommand("texmake.menu", () => openMenu()),
     vscode.commands.registerCommand("texmake.build", () => build()),
+    vscode.commands.registerCommand("texmake.clean", () => clean()),
     vscode.commands.registerCommand("texmake.cancel", () => runner.cancel()),
     vscode.commands.registerCommand("texmake.showReason", () =>
       vscode.window.showWarningMessage(reasonOf(currentDetection())),
