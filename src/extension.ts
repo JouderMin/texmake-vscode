@@ -70,7 +70,7 @@ export function activate(context: vscode.ExtensionContext): void {
   async function update(): Promise<void> {
     const settings = readSettings();
     const d = currentDetection();
-    const args = buildArgs(d, settings.extraArgs);
+    const args = buildArgs(d, "build", settings.extraArgs);
     const command = args === undefined ? "" : [settings.executable, ...args].join(" ");
 
     statusBar.text =
@@ -95,7 +95,7 @@ export function activate(context: vscode.ExtensionContext): void {
   async function build(): Promise<boolean> {
     const settings = readSettings();
     const d = currentDetection();
-    const args = buildArgs(d, settings.extraArgs);
+    const args = buildArgs(d, "build", settings.extraArgs);
     if (args === undefined || (d.kind !== "project" && d.kind !== "member")) {
       void vscode.window.showErrorMessage(reasonOf(d));
       return false;
