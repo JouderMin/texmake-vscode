@@ -5,6 +5,8 @@ export interface MenuItem {
   id: "build" | "clean" | "cancel" | "reason";
   label: string;
   description: string;
+  /** codicon id（不含 `$()`），由编辑器侧包装成 ThemeIcon。 */
+  icon: string;
 }
 
 /**
@@ -13,18 +15,20 @@ export interface MenuItem {
  */
 export function menuItems(d: Detection, building: boolean): MenuItem[] {
   if (building) {
-    return [{ id: "cancel", label: "取消构建", description: "停止当前 texmake 进程" }];
+    return [
+      { id: "cancel", label: "取消构建", description: "停止当前 texmake 进程", icon: "debug-stop" },
+    ];
   }
   switch (d.kind) {
     case "project":
     case "member":
       return [
-        { id: "build", label: "编译", description: `构建 ${d.name}` },
-        { id: "clean", label: "清理", description: `清理 ${d.name} 的辅助文件` },
+        { id: "build", label: "编译", description: `构建 ${d.name}`, icon: "play" },
+        { id: "clean", label: "清理", description: `清理 ${d.name} 的辅助文件`, icon: "trash" },
       ];
     case "config-error":
     case "member-error":
     case "unlocated":
-      return [{ id: "reason", label: "查看原因", description: d.reason }];
+      return [{ id: "reason", label: "查看原因", description: d.reason, icon: "info" }];
   }
 }

@@ -202,6 +202,7 @@ export function activate(context: vscode.ExtensionContext): void {
       id: item.id,
       label: item.label,
       description: item.description,
+      iconPath: new vscode.ThemeIcon(item.icon),
     }));
     const picked = await vscode.window.showQuickPick(items, {
       title: "texmake",
