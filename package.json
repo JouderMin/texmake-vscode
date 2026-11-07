@@ -25,6 +25,11 @@
       {
         "command": "texmake.showReason",
         "title": "texmake: Show Detection Reason"
+      },
+      {
+        "command": "texmake.openPdf",
+        "title": "texmake: 预览 PDF",
+        "icon": "$(open-preview)"
       }
     ],
     "keybindings": [
@@ -40,6 +45,13 @@
         {
           "command": "texmake.cancel",
           "when": "texmake.building"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "texmake.openPdf",
+          "when": "resourceExtname == .tex && texmake.projectActive",
+          "group": "navigation"
         }
       ]
     },

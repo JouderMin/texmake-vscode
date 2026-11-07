@@ -1,7 +1,9 @@
+import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import { buildArgs } from "./buildargs";
 import { detect, type Detection } from "./detect";
+import { resolvePdfPath } from "./pdf";
 import { Runner } from "./runner";
 import { statusLabel, statusTooltip } from "./status";
 
@@ -89,14 +91,14 @@ export function activate(context: vscode.ExtensionContext): void {
     ]);
   }
 
-  /** 按当前归属启动一次构建；不可构建时说明原因。 */
-  async function build(): Promise<void> {
+  /** 按当前归属启动一次构建；成功（退出码 0 且未取消）返回 true，否则 false。 */
+  async function build(): Promise<boolean> {
     const settings = readSettings();
     const d = currentDetection();
     const args = buildArgs(d, settings.extraArgs);
     if (args === undefined || (d.kind !== "project" && d.kind !== "member")) {
       void vscode.window.showErrorMessage(reasonOf(d));
-      return;
+      return false;
     }
 
     const generation = ++buildGeneration;
@@ -107,7 +109,7 @@ export function activate(context: vscode.ExtensionContext): void {
     statusBar.command = "texmake.cancel";
     await vscode.commands.executeCommand("setContext", "texmake.building", true);
     try {
-      await vscode.window.withProgress(
+      return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
           title: `texmake: 构建 ${d.name}`,
@@ -133,6 +135,7 @@ export function activate(context: vscode.ExtensionContext): void {
                 `texmake 构建失败，退出码 ${outcome.code ?? "未知"}`,
               );
             }
+            return !outcome.cancelled && outcome.spawnError === undefined && outcome.code === 0;
           } finally {
             cancelRequested.dispose();
             output.show(true);
@@ -148,6 +151,46 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
+  /** 用 VSCode 默认 PDF 编辑器在右侧分栏打开。 */
+  async function openPdfFile(pdfPath: string): Promise<void> {
+    await vscode.commands.executeCommand("vscode.open", vscode.Uri.file(pdfPath), {
+      viewColumn: vscode.ViewColumn.Beside,
+    });
+  }
+
+  /** 打开当前文档的 PDF；尚未生成时可先编译。 */
+  async function openPdf(): Promise<void> {
+    const d = currentDetection();
+    const pdfPath = resolvePdfPath(d);
+    if (pdfPath === undefined) {
+      void vscode.window.showWarningMessage("texmake: 无法确定 PDF 路径");
+      return;
+    }
+    if (fs.existsSync(pdfPath)) {
+      await openPdfFile(pdfPath);
+      return;
+    }
+    if (runner.running) {
+      void vscode.window.showWarningMessage("texmake: 构建进行中，请等待完成后再预览 PDF");
+      return;
+    }
+    const choice = await vscode.window.showWarningMessage(
+      `PDF 尚未生成：${pdfPath}`,
+      "编译并打开",
+    );
+    if (choice !== "编译并打开") {
+      return;
+    }
+    // 对话框打开期间可能已有新的构建启动，避免并发第二次构建。
+    if (runner.running) {
+      void vscode.window.showWarningMessage("texmake: 构建进行中，请等待完成后再预览 PDF");
+      return;
+    }
+    if (await build()) {
+      await openPdfFile(pdfPath);
+    }
+  }
+
   context.subscriptions.push(
     output,
     statusBar,
@@ -156,6 +199,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("texmake.showReason", () =>
       vscode.window.showWarningMessage(reasonOf(currentDetection())),
     ),
+    vscode.commands.registerCommand("texmake.openPdf", () => openPdf()),
     vscode.window.onDidChangeActiveTextEditor(() => {
       void update();
     }),

@@ -9,6 +9,7 @@
 - **F5 编译**：`texmake.projectActive && texmake.f5Enabled` 时接管 F5。单项目执行 `texmake build`，成员执行 `texmake -p <name> build`，工作目录为根目录。
 - **取消与重启**：构建中再按 F5 会取消当前构建并重启。取消先发 SIGTERM，2 秒后仍未退出则发 SIGKILL。
 - **输出**：每次构建先向「texmake」输出通道写 `$ <完整命令> (cwd: <根目录>)`，随后流式输出 stdout 与 stderr；退出码非 0 时弹错误通知。
+- **预览 PDF**：`.tex` 文件编辑器右上角显示预览按钮，点击后在右侧分栏用 VSCode 默认 PDF 编辑器打开该文档的 PDF；尚未生成时提供「编译并打开」。
 
 ## 安装
 
