@@ -52,3 +52,106 @@ test("未定位只提供查看原因", () => {
     { id: "reason", label: "查看原因", description: "未找到 texmake.toml", icon: "info" },
   ]);
 });
+
+test("构建中即使有配方配置也只显示取消构建", () => {
+  const config = { recipes: ["release", "draft"], defaultRecipe: "release" };
+  assert.deepEqual(menuItems({ kind: "project", root: "/w", name: "thesis" }, true, config), [
+    { id: "cancel", label: "取消构建", description: "停止当前 texmake 进程", icon: "debug-stop" },
+  ]);
+});
+
+test("有默认配方时先给裸编译，其余配方逐个命名", () => {
+  const config = { recipes: ["release", "draft", "fast"], defaultRecipe: "release" };
+  assert.deepEqual(menuItems({ kind: "project", root: "/w", name: "thesis" }, false, config), [
+    { id: "build", label: "编译", description: "默认配方：release", icon: "play" },
+    {
+      id: "build",
+      label: "编译（draft）",
+      description: "用配方 draft 构建 thesis",
+      icon: "play",
+      recipe: "draft",
+    },
+    {
+      id: "build",
+      label: "编译（fast）",
+      description: "用配方 fast 构建 thesis",
+      icon: "play",
+      recipe: "fast",
+    },
+    { id: "clean", label: "清理", description: "清理 thesis 的辅助文件", icon: "trash" },
+  ]);
+});
+
+test("默认配方不在首位时按文件顺序列出其余配方，命名项不重复默认配方", () => {
+  const config = { recipes: ["draft", "release"], defaultRecipe: "release" };
+  assert.deepEqual(menuItems({ kind: "project", root: "/w", name: "thesis" }, false, config), [
+    { id: "build", label: "编译", description: "默认配方：release", icon: "play" },
+    {
+      id: "build",
+      label: "编译（draft）",
+      description: "用配方 draft 构建 thesis",
+      icon: "play",
+      recipe: "draft",
+    },
+    { id: "clean", label: "清理", description: "清理 thesis 的辅助文件", icon: "trash" },
+  ]);
+});
+
+test("唯一配方且未标默认时只给裸编译", () => {
+  assert.deepEqual(
+    menuItems({ kind: "project", root: "/w", name: "thesis" }, false, { recipes: ["only"] }),
+    [
+      { id: "build", label: "编译", description: "构建 thesis", icon: "play" },
+      { id: "clean", label: "清理", description: "清理 thesis 的辅助文件", icon: "trash" },
+    ],
+  );
+});
+
+test("多配方且无默认时不提供裸编译，只给命名项", () => {
+  const config = { recipes: ["draft", "camera-ready"] };
+  assert.deepEqual(menuItems({ kind: "project", root: "/w", name: "thesis" }, false, config), [
+    {
+      id: "build",
+      label: "编译（draft）",
+      description: "用配方 draft 构建 thesis",
+      icon: "play",
+      recipe: "draft",
+    },
+    {
+      id: "build",
+      label: "编译（camera-ready）",
+      description: "用配方 camera-ready 构建 thesis",
+      icon: "play",
+      recipe: "camera-ready",
+    },
+    { id: "clean", label: "清理", description: "清理 thesis 的辅助文件", icon: "trash" },
+  ]);
+});
+
+test("无配方配置时保持单项编译", () => {
+  assert.deepEqual(
+    menuItems({ kind: "project", root: "/w", name: "thesis" }, false, { recipes: [] }),
+    [
+      { id: "build", label: "编译", description: "构建 thesis", icon: "play" },
+      { id: "clean", label: "清理", description: "清理 thesis 的辅助文件", icon: "trash" },
+    ],
+  );
+});
+
+test("成员模式按成员自己的配方生成编译项", () => {
+  const config = { recipes: ["release", "draft"], defaultRecipe: "release" };
+  assert.deepEqual(
+    menuItems({ kind: "member", root: "/w", name: "paper", memberDir: "/w/paper" }, false, config),
+    [
+      { id: "build", label: "编译", description: "默认配方：release", icon: "play" },
+      {
+        id: "build",
+        label: "编译（draft）",
+        description: "用配方 draft 构建 paper",
+        icon: "play",
+        recipe: "draft",
+      },
+      { id: "clean", label: "清理", description: "清理 paper 的辅助文件", icon: "trash" },
+    ],
+  );
+});

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import * as vscode from "vscode";
 import { buildArgs, type Operation } from "./buildargs";
+import { projectConfig } from "./config";
 import { detect, type Detection } from "./detect";
 import { menuItems, type MenuItem } from "./menu";
 import { resolvePdfPath } from "./pdf";
@@ -73,6 +74,7 @@ function ownershipLabel(d: Detection): string {
 /** 菜单项的编辑器侧形态：在 label/description 之外带上分派用的 id。 */
 interface MenuQuickPickItem extends vscode.QuickPickItem {
   id: MenuItem["id"];
+  recipe?: string;
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -112,7 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
    * 按当前归属执行一次 texmake 操作（编译或清理）。
    * 成功（退出码 0 且未取消）返回 true。清理与编译互斥：构建进行中直接拒绝。
    */
-  async function runOperation(operation: Operation): Promise<boolean> {
+  async function runOperation(operation: Operation, recipe?: string): Promise<boolean> {
     if (operation === "clean" && runner.running) {
       void vscode.window.showWarningMessage("texmake: 构建进行中，请等待完成后再清理");
       return false;
@@ -120,7 +122,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     const settings = readSettings();
     const d = currentDetection();
-    const args = buildArgs(d, operation, settings.extraArgs);
+    const args = buildArgs(d, operation, settings.extraArgs, recipe);
     if (args === undefined || (d.kind !== "project" && d.kind !== "member")) {
       void vscode.window.showErrorMessage(reasonOf(d));
       return false;
@@ -138,7 +140,10 @@ export function activate(context: vscode.ExtensionContext): void {
       return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `texmake: ${noun} ${d.name}`,
+          title:
+            operation === "build" && recipe !== undefined
+              ? `texmake: 编译 ${d.name}（${recipe}）`
+              : `texmake: ${noun} ${d.name}`,
           cancellable: true,
         },
         async (_progress, token) => {
@@ -185,9 +190,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  /** 编译当前文件所属的工程或成员。 */
-  async function build(): Promise<boolean> {
-    return runOperation("build");
+  /** 编译当前文件所属的工程或成员；不给 recipe 时走 texmake 的默认配方。 */
+  async function build(recipe?: string): Promise<boolean> {
+    return runOperation("build", recipe);
   }
 
   /** 清理当前文件所属的工程或成员。 */
@@ -198,12 +203,15 @@ export function activate(context: vscode.ExtensionContext): void {
   /** 点击状态栏弹出菜单，并按选中项分派到编译、清理、取消或查看原因。 */
   async function openMenu(): Promise<void> {
     const d = currentDetection();
-    const items: MenuQuickPickItem[] = menuItems(d, runner.running).map((item) => ({
-      id: item.id,
-      label: item.label,
-      description: item.description,
-      iconPath: new vscode.ThemeIcon(item.icon),
-    }));
+    const items: MenuQuickPickItem[] = menuItems(d, runner.running, projectConfig(d)).map(
+      (item) => ({
+        id: item.id,
+        label: item.label,
+        description: item.description,
+        iconPath: new vscode.ThemeIcon(item.icon),
+        ...(item.recipe === undefined ? {} : { recipe: item.recipe }),
+      }),
+    );
     const picked = await vscode.window.showQuickPick(items, {
       title: "texmake",
       placeHolder: ownershipLabel(d),
@@ -213,7 +221,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     switch (picked.id) {
       case "build":
-        await build();
+        await build(picked.recipe);
         return;
       case "clean":
         await clean();

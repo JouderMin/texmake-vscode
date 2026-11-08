@@ -6,8 +6,8 @@
 
 - **识别归属**：找到包含当前文件的工作区文件夹，读取根目录的 `texmake.toml`。`[project]` 表表示单项目；`[workspace]` 的 `members` 列表把文件映射到成员目录，成员名取自成员自己的 `texmake.toml`。
 - **状态栏**：空闲时显示工程名或成员名；配置错误显示警告图标；构建中显示 `$(sync~spin) texmake: <name>`。
-- **状态栏菜单**：点击状态栏弹出菜单，提供编译、清理；构建中只提供取消构建，错误态提供查看原因。
-- **F5 编译**：`texmake.projectActive && texmake.f5Enabled` 时接管 F5。单项目执行 `texmake build`，成员执行 `texmake -p <name> build`，工作目录为根目录。
+- **状态栏菜单**：点击状态栏弹出菜单，提供编译、清理；`texmake.toml` 的 `[recipes]` 有多个配方时，菜单先给出使用默认配方的「编译」，再逐个给出「编译（配方名）」，没有默认配方时只列出命名项；构建中只提供取消构建，错误态提供查看原因。
+- **F5 编译**：`texmake.projectActive && texmake.f5Enabled` 时接管 F5。单项目执行 `texmake build`，成员执行 `texmake -p <name> build`，工作目录为根目录；F5 始终使用默认配方，不弹配方选择。
 - **清理**：菜单选「清理」或运行 `texmake.clean`。单项目执行 `texmake clean`，成员执行 `texmake -p <name> clean`，构建进行中时不并发执行。
 - **取消与重启**：构建中再按 F5 会取消当前构建并重启。取消先发 SIGTERM，2 秒后仍未退出则发 SIGKILL。
 - **输出**：每次编译或清理先向「texmake」输出通道写 `$ <完整命令> (cwd: <根目录>)`，随后流式输出 stdout 与 stderr；退出码非 0 时弹错误通知。
@@ -18,7 +18,7 @@
 | 命令 | 说明 |
 |---|---|
 | `texmake.menu` | 打开状态栏菜单 |
-| `texmake.build` | 编译当前文件所属的工程或成员 |
+| `texmake.build` | 编译当前文件所属的工程或成员（默认配方） |
 | `texmake.clean` | 清理当前文件所属的工程或成员的辅助文件 |
 | `texmake.cancel` | 取消当前构建 |
 | `texmake.showReason` | 显示归属判定原因 |
