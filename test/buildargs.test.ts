@@ -68,3 +68,35 @@ test("错误态 clean 同样返回 undefined", () => {
     undefined,
   );
 });
+test("项目模式 build 带配方", () => {
+  assert.deepEqual(
+    buildArgs({ kind: "project", root: "/w", name: "thesis" }, "build", ["-v"], "draft"),
+    ["build", "draft", "-v"],
+  );
+});
+test("成员模式 build 带配方", () => {
+  assert.deepEqual(
+    buildArgs(
+      { kind: "member", root: "/w", name: "paper", memberDir: "/w/paper" },
+      "build",
+      [],
+      "release",
+    ),
+    ["-p", "paper", "build", "release"],
+  );
+});
+test("clean 忽略配方", () => {
+  assert.deepEqual(
+    buildArgs({ kind: "project", root: "/w", name: "thesis" }, "clean", ["-v"], "draft"),
+    ["clean", "-v"],
+  );
+  assert.deepEqual(
+    buildArgs(
+      { kind: "member", root: "/w", name: "paper", memberDir: "/w/paper" },
+      "clean",
+      [],
+      "release",
+    ),
+    ["-p", "paper", "clean"],
+  );
+});
